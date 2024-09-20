@@ -58,11 +58,11 @@ def svg_to_png(svg_path: str, png_path: str, lock: Lock):
     im.close()
 
 
-def render_chart(score_path: str, chart_path: str, music: dict, lock: Lock):
+def render_chart(score_path: str, chart_path: str, music: dict, jacket: str, lock: Lock):
     # open the score from score_path and render it to a chart in chart_path
     score = scores.Score.open(score_path, encoding='utf-8')
     score.meta.title = music['title']
-    score.meta.jacket = f'https://storage.sekai.best/sekai-jp-assets/music/jacket/jacket_s_{str(music['id']).zfill(3)}_rip/jacket_s_{str(music['id']).zfill(3)}.png'
+    score.meta.jacket = jacket
     drawing = scores.Drawing(score)
     svg = drawing.svg()
     svg.saveas(chart_path)
@@ -96,6 +96,7 @@ def download_and_render_score(musicDifficulty: dict):
     score_url: str = musicDifficulty['scoreUrl']
     score_path: str = musicDifficulty['scorePath']
     chart_path: str = musicDifficulty['chartPath']
+    jacket: str = musicDifficulty['jacket']
 
     print(f'Processing music id {id} with difficulty {difficulty}')
 
@@ -105,12 +106,21 @@ def download_and_render_score(musicDifficulty: dict):
 
     # download score and render chart
     makedirs(score_path.rsplit('/', 1)[0], exist_ok=True)
+    print(f'Downloading music id {id} with difficulty {difficulty}')
     download_score(score_url, score_path)
 
     makedirs(chart_path.rsplit('/', 1)[0], exist_ok=True)
-    render_chart(score_path, chart_path, music, lock)
+    print(f'Rendering music id {id} with difficulty {difficulty}')
+    render_chart(score_path, chart_path, music, jacket, lock)
 
     print(f'Chart for music id {id} with difficulty {difficulty} saved to {chart_path}')
+    
+
+def get_json_url(server: str, json_name: str) -> str:
+    if server == 'jp':
+        return f'https://sekai-world.github.io/sekai-master-db-diff/{json_name}.json'
+    else:
+        return f'https://sekai-world.github.io/sekai-master-db-{server}-diff/{json_name}.json'
 
 
 if __name__ == '__main__':
@@ -118,9 +128,10 @@ if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser(description='Download and render Sekai music charts.')
     parser.add_argument('--all', '-A', action='store_true', help='Process all charts')
-    parser.add_argument('musicId', nargs='?', type=int, help='Process a single chart by music ID')
-    parser.add_argument('-D', '--difficulty', choices=["easy", "normal", "hard", "expert", "master", "append"], help='Specify difficulty for the chart', required=False)
+    parser.add_argument('musicId', nargs='*', type=int, help='Process one or more charts by music ID')
+    parser.add_argument('-D', '--difficulty', nargs='+', choices=["easy", "normal", "hard", "expert", "master", "append"], help='Specify difficulty for the chart', required=False)
     parser.add_argument('-O', '--output', type=str, default=getcwd(), help='Specify output folder for the charts (default: current directory)')
+    parser.add_argument('-S', '--server', choices=["jp", "en", "tc", "kr"], default="jp", help='Specify server for the charts (default: jp)')
 
     args = parser.parse_args()
     # print(args)
@@ -130,27 +141,27 @@ if __name__ == '__main__':
     elif args.all and args.musicId:
         parser.error('Conflicting options: --all and musicId')
 
-    musicDifficulties = get_list(
-        'https://sekai-world.github.io/sekai-master-db-diff/musicDifficulties.json')
-    musics = get_list(
-        'https://sekai-world.github.io/sekai-master-db-diff/musics.json')
+    musicDifficulties = get_list(get_json_url(args.server, 'musicDifficulties'))
+    musics = get_list(get_json_url(args.server, 'musics'))
         
     if not args.all:
-        musicDifficulties = [md for md in musicDifficulties if md['musicId'] == args.musicId]
+        musicDifficulties = [md for md in musicDifficulties if md['musicId'] in args.musicId]
     if args.difficulty:
-        musicDifficulties = [md for md in musicDifficulties if md['musicDifficulty'] == args.difficulty]
+        musicDifficulties = [md for md in musicDifficulties if md['musicDifficulty'] in args.difficulty]
     
     lock = Lock()
     # add lock to every musicDifficulty
     for musicDifficulty in musicDifficulties:
         id: int = musicDifficulty['musicId']
         difficulty: str = musicDifficulty['musicDifficulty']
-        padId = str(id).zfill(4)
+        padId4 = str(id).zfill(4)
+        padId3 = str(id).zfill(3)
         
-        musicDifficulty['scoreUrl'] = f'https://storage.sekai.best/sekai-jp-assets/music/music_score/{padId}_01_rip/{difficulty}.txt'
-        musicDifficulty['scorePath']= path.join(args.output, 'scores', padId, f'{difficulty}.txt')
-        musicDifficulty['chartPath'] = path.join(args.output, 'charts', padId, f'{difficulty}.svg')
+        musicDifficulty['scoreUrl'] = f'https://storage.sekai.best/sekai-{args.server}-assets/music/music_score/{padId4}_01_rip/{difficulty}.txt'
+        musicDifficulty['scorePath']= path.join(args.output, 'scores', args.server, padId4, f'{difficulty}.txt')
+        musicDifficulty['chartPath'] = path.join(args.output, 'charts', args.server, padId4, f'{difficulty}.svg')
         musicDifficulty['lock'] = lock
+        musicDifficulty['jacket'] = f'https://storage.sekai.best/sekai-{args.server}-assets/music/jacket/jacket_s_{padId3}_rip/jacket_s_{padId3}.png'
         
 
     with ThreadPoolExecutor() as executor:
