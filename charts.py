@@ -123,7 +123,7 @@ if __name__ == '__main__':
     parser.add_argument('-O', '--output', type=str, default=getcwd(), help='Specify output folder for the charts (default: current directory)')
 
     args = parser.parse_args()
-    print(args)
+    # print(args)
 
     if not args.all and not args.musicId:
         parser.error('No action requested, add --all or specify a musicId')
