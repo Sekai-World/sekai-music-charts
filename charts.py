@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from os import getcwd, makedirs, path
 from selenium import webdriver
 from threading import Lock
-from typing import List
+from typing import List, Tuple
 import requests
 import sekaiworld.scores as scores
 
@@ -86,7 +86,8 @@ def get_list(url: str) -> List[dict]:
     return response.json()
 
 
-def download_and_render_score(musicDifficulty: dict):
+def download_and_render_score(musicInfo: Tuple[dict, dict]):
+    music, musicDifficulty = musicInfo
     if musicDifficulty.get('lock', None) is None:
         raise ValueError('lock is not set in musicDifficulty')
 
@@ -99,10 +100,6 @@ def download_and_render_score(musicDifficulty: dict):
     jacket: str = musicDifficulty['jacket']
 
     print(f'Processing music id {id} with difficulty {difficulty}')
-
-    # find music by id
-    music = next((music for music in musics if music['id'] == id), None)
-    assert music is not None, f'Music with id {id} not found'
 
     # download score and render chart
     makedirs(score_path.rsplit('/', 1)[0], exist_ok=True)
@@ -146,6 +143,7 @@ if __name__ == '__main__':
         
     if not args.all:
         musicDifficulties = [md for md in musicDifficulties if md['musicId'] in args.musicId]
+        musics = [music for music in musics if music['id'] in args.musicId]
     if args.difficulty:
         musicDifficulties = [md for md in musicDifficulties if md['musicDifficulty'] in args.difficulty]
     
@@ -165,4 +163,4 @@ if __name__ == '__main__':
         
 
     with ThreadPoolExecutor() as executor:
-        executor.map(download_and_render_score, musicDifficulties)
+        executor.map(download_and_render_score, [(music, musicDifficulty) for musicDifficulty in musicDifficulties for music in musics if music['id'] == musicDifficulty['musicId']])
